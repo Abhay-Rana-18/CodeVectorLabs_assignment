@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CodeVector Products</title>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: system-ui, sans-serif;
+        background: #f5f5f5;
+        color: #1a1a1a;
+        min-height: 100vh;
+      }
+
+      header {
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 1rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+
+      header h1 { font-size: 1.2rem; font-weight: 700; flex: 1; }
+
+      .filters {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+
+      select, button {
+        padding: 0.45rem 0.9rem;
+        border-radius: 6px;
+        border: 1px solid #d0d0d0;
+        font-size: 0.875rem;
+        cursor: pointer;
+        background: #fff;
+        transition: border-color 0.15s;
+      }
+
+      select:focus, button:focus { outline: none; border-color: #555; }
+
+      button.primary {
+        background: #1a1a1a;
+        color: #fff;
+        border-color: #1a1a1a;
+      }
+
+      button:disabled { opacity: 0.4; cursor: default; }
+
+      main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
+
+      #status {
+        font-size: 0.8rem;
+        color: #666;
+        margin-bottom: 1rem;
+        min-height: 1.2em;
+      }
+
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1rem;
+      }
+
+      .card {
+        background: #fff;
+        border: 1px solid #e8e8e8;
+        border-radius: 10px;
+        padding: 1.1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+        animation: fadeIn 0.2s ease;
+      }
+
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+      .card-name { font-weight: 600; font-size: 0.95rem; }
+
+      .card-category {
+        font-size: 0.75rem;
+        background: #f0f0f0;
+        color: #555;
+        padding: 0.2rem 0.55rem;
+        border-radius: 99px;
+        width: fit-content;
+        text-transform: capitalize;
+      }
+
+      .card-price {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #111;
+        margin-top: auto;
+        padding-top: 0.5rem;
+      }
+
+      .card-date { font-size: 0.7rem; color: #aaa; }
+
+      #pagination {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-top: 2rem;
+        flex-wrap: wrap;
+      }
+
+      #pagination span { font-size: 0.85rem; color: #555; }
+
+      .skeleton {
+        background: linear-gradient(90deg, #ebebeb 25%, #f5f5f5 50%, #ebebeb 75%);
+        background-size: 200% 100%;
+        animation: shimmer 1.2s infinite;
+        border-radius: 6px;
+      }
+
+      @keyframes shimmer { to { background-position: -200% 0; } }
+
+      .card.loading .card-name  { height: 14px; width: 70%; }
+      .card.loading .card-category { height: 12px; width: 40%; }
+      .card.loading .card-price { height: 18px; width: 30%; }
+      .card.loading .card-date  { height: 10px; width: 55%; }
+
+      #error {
+        color: #c0392b;
+        background: #fdecea;
+        border: 1px solid #f5c6c2;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+        display: none;
+        font-size: 0.875rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>CodeVector Products</h1>
+      <div class="filters">
+        <select id="categorySelect">
+          <option value="">All categories</option>
+        </select>
+        <select id="limitSelect">
+          <option value="20">20 / page</option>
+          <option value="50">50 / page</option>
+          <option value="100">100 / page</option>
+        </select>
+      </div>
+    </header>
+
+    <main>
+      <div id="error"></div>
+      <p id="status"></p>
+      <div id="grid"></div>
+      <div id="pagination">
+        <button id="prevBtn" class="primary" disabled>← Prev</button>
+        <span id="pageInfo">Page 1</span>
+        <button id="nextBtn" class="primary" disabled>Next →</button>
+      </div>
+    </main>
+
+    <script>
+      const API = "http://localhost:3000";
+
+      // Stack of cursors for each page; index 0 = page 1 (no cursor)
+      let cursorStack = [null];
+      let currentPage = 1;
+
+      const grid        = document.getElementById("grid");
+      const status      = document.getElementById("status");
+      const errorBox    = document.getElementById("error");
+      const prevBtn     = document.getElementById("prevBtn");
+      const nextBtn     = document.getElementById("nextBtn");
+      const pageInfo    = document.getElementById("pageInfo");
+      const catSelect   = document.getElementById("categorySelect");
+      const limitSelect = document.getElementById("limitSelect");
+
+      // ── Skeleton loaders ────────────────────────────────────────────────
+      function showSkeletons(n = 20) {
+        grid.innerHTML = Array.from({ length: n }, () => `
+          <div class="card loading">
+            <div class="card-name skeleton"></div>
+            <div class="card-category skeleton"></div>
+            <div class="card-price skeleton"></div>
+            <div class="card-date skeleton"></div>
+          </div>`).join("");
+      }
+
+      // ── Render products ─────────────────────────────────────────────────
+      function renderProducts(products) {
+        if (!products.length) {
+          grid.innerHTML = `<p style="color:#888;grid-column:1/-1">No products found.</p>`;
+          return;
+        }
+        grid.innerHTML = products.map((p) => `
+          <div class="card">
+            <div class="card-name">${escHtml(p.name)}</div>
+            <div class="card-category">${escHtml(p.category)}</div>
+            <div class="card-price">$${Number(p.price).toFixed(2)}</div>
+            <div class="card-date">${new Date(p.created_at).toLocaleDateString()}</div>
+          </div>`).join("");
+      }
+
+      function escHtml(str) {
+        return str.replace(/[&<>"']/g, (c) =>
+          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+        );
+      }
+
+      // ── Fetch one page ──────────────────────────────────────────────────
+      async function loadPage(cursor) {
+        const limit    = limitSelect.value;
+        const category = catSelect.value;
+
+        setLoading(true);
+        showSkeletons(Number(limit));
+        errorBox.style.display = "none";
+
+        const params = new URLSearchParams({ limit });
+        if (cursor)   params.set("cursor", cursor);
+        if (category) params.set("category", category);
+
+        try {
+          const res  = await fetch(`${API}/api/products?${params}`);
+          if (!res.ok) throw new Error(`Server error ${res.status}`);
+          const json = await res.json();
+
+          renderProducts(json.data);
+          status.textContent =
+            `Showing ${json.data.length} product${json.data.length !== 1 ? "s" : ""} · Page ${currentPage}`;
+
+          // Push next cursor onto the stack only when moving forward
+          if (json.hasNextPage && cursorStack.length === currentPage) {
+            cursorStack.push(json.nextCursor);
+          }
+
+          prevBtn.disabled = currentPage === 1;
+          nextBtn.disabled = !json.hasNextPage;
+          pageInfo.textContent = `Page ${currentPage}`;
+        } catch (err) {
+          grid.innerHTML = "";
+          errorBox.textContent = `Failed to load products: ${err.message}`;
+          errorBox.style.display = "block";
+          status.textContent = "";
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function setLoading(on) {
+        prevBtn.disabled = on || currentPage === 1;
+        nextBtn.disabled = on;
+      }
+
+      // ── Pagination controls ──────────────────────────────────────────────
+      nextBtn.addEventListener("click", () => {
+        currentPage++;
+        loadPage(cursorStack[currentPage - 1]);
+      });
+
+      prevBtn.addEventListener("click", () => {
+        currentPage--;
+        loadPage(cursorStack[currentPage - 1]);
+      });
+
+      // ── Category / limit change resets to page 1 ────────────────────────
+      function reset() {
+        cursorStack = [null];
+        currentPage = 1;
+        loadPage(null);
+      }
+
+      catSelect.addEventListener("change", reset);
+      limitSelect.addEventListener("change", reset);
+
+      // ── Load categories ──────────────────────────────────────────────────
+      async function loadCategories() {
+        try {
+          const res  = await fetch(`${API}/api/products/categories`);
+          const json = await res.json();
+          json.data.forEach((cat) => {
+            const opt = document.createElement("option");
+            opt.value = cat;
+            opt.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+            catSelect.appendChild(opt);
+          });
+        } catch {
+          // non-fatal — all-categories still works
+        }
+      }
+
+      // ── Boot ─────────────────────────────────────────────────────────────
+      loadCategories();
+      loadPage(null);
+    </script>
+  </body>
+</html>
