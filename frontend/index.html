@@ -1,11 +1,17 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CodeVector Products</title>
     <style>
-      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
       body {
         font-family: system-ui, sans-serif;
@@ -26,7 +32,11 @@
         z-index: 10;
       }
 
-      header h1 { font-size: 1.2rem; font-weight: 700; flex: 1; }
+      header h1 {
+        font-size: 1.2rem;
+        font-weight: 700;
+        flex: 1;
+      }
 
       .filters {
         display: flex;
@@ -35,7 +45,8 @@
         flex-wrap: wrap;
       }
 
-      select, button {
+      select,
+      button {
         padding: 0.45rem 0.9rem;
         border-radius: 6px;
         border: 1px solid #d0d0d0;
@@ -45,7 +56,11 @@
         transition: border-color 0.15s;
       }
 
-      select:focus, button:focus { outline: none; border-color: #555; }
+      select:focus,
+      button:focus {
+        outline: none;
+        border-color: #555;
+      }
 
       button.primary {
         background: #1a1a1a;
@@ -53,9 +68,16 @@
         border-color: #1a1a1a;
       }
 
-      button:disabled { opacity: 0.4; cursor: default; }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
 
-      main { max-width: 1200px; margin: 0 auto; padding: 1.5rem 2rem; }
+      main {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1.5rem 2rem;
+      }
 
       #status {
         font-size: 0.8rem;
@@ -81,9 +103,20 @@
         animation: fadeIn 0.2s ease;
       }
 
-      @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+        }
+      }
 
-      .card-name { font-weight: 600; font-size: 0.95rem; }
+      .card-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+      }
 
       .card-category {
         font-size: 0.75rem;
@@ -103,7 +136,10 @@
         padding-top: 0.5rem;
       }
 
-      .card-date { font-size: 0.7rem; color: #aaa; }
+      .card-date {
+        font-size: 0.7rem;
+        color: #aaa;
+      }
 
       #pagination {
         display: flex;
@@ -114,21 +150,71 @@
         flex-wrap: wrap;
       }
 
-      #pagination span { font-size: 0.85rem; color: #555; }
+      #pagination span {
+        font-size: 0.85rem;
+        color: #555;
+      }
 
       .skeleton {
-        background: linear-gradient(90deg, #ebebeb 25%, #f5f5f5 50%, #ebebeb 75%);
+        background: linear-gradient(
+          90deg,
+          #ebebeb 25%,
+          #f5f5f5 50%,
+          #ebebeb 75%
+        );
         background-size: 200% 100%;
         animation: shimmer 1.2s infinite;
         border-radius: 6px;
       }
 
-      @keyframes shimmer { to { background-position: -200% 0; } }
+      @keyframes shimmer {
+        to {
+          background-position: -200% 0;
+        }
+      }
 
-      .card.loading .card-name  { height: 14px; width: 70%; }
-      .card.loading .card-category { height: 12px; width: 40%; }
-      .card.loading .card-price { height: 18px; width: 30%; }
-      .card.loading .card-date  { height: 10px; width: 55%; }
+      .card.loading .card-name {
+        height: 14px;
+        width: 70%;
+      }
+      .card.loading .card-category {
+        height: 12px;
+        width: 40%;
+      }
+      .card.loading .card-price {
+        height: 18px;
+        width: 30%;
+      }
+      .card.loading .card-date {
+        height: 10px;
+        width: 55%;
+      }
+
+      #toast {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        background: #1a1a1a;
+        color: #fff;
+        padding: 0.65rem 1.1rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        opacity: 0;
+        transform: translateY(8px);
+        transition: opacity 0.25s, transform 0.25s;
+        pointer-events: none;
+        z-index: 100;
+      }
+
+      #toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #addBtn.loading {
+        opacity: 0.6;
+        cursor: default;
+      }
 
       #error {
         color: #c0392b;
@@ -154,8 +240,11 @@
           <option value="50">50 / page</option>
           <option value="100">100 / page</option>
         </select>
+        <button id="addBtn" class="primary">+ Add 50 Products</button>
       </div>
     </header>
+
+    <div id="toast"></div>
 
     <main>
       <div id="error"></div>
@@ -170,29 +259,37 @@
 
     <script>
       const API = "http://localhost:3000";
+      // const API = "https://codevectorlabs-assignment-1.onrender.com";
 
       // Stack of cursors for each page; index 0 = page 1 (no cursor)
       let cursorStack = [null];
       let currentPage = 1;
+      // Snapshot of the top-of-list at session start; sent as `before` on every
+      // request so that rows added after browsing begins are excluded on all pages,
+      // including page 1 when navigating backwards.
+      let sessionCursor = null;
 
-      const grid        = document.getElementById("grid");
-      const status      = document.getElementById("status");
-      const errorBox    = document.getElementById("error");
-      const prevBtn     = document.getElementById("prevBtn");
-      const nextBtn     = document.getElementById("nextBtn");
-      const pageInfo    = document.getElementById("pageInfo");
-      const catSelect   = document.getElementById("categorySelect");
+      const grid = document.getElementById("grid");
+      const status = document.getElementById("status");
+      const errorBox = document.getElementById("error");
+      const prevBtn = document.getElementById("prevBtn");
+      const nextBtn = document.getElementById("nextBtn");
+      const pageInfo = document.getElementById("pageInfo");
+      const catSelect = document.getElementById("categorySelect");
       const limitSelect = document.getElementById("limitSelect");
 
       // ── Skeleton loaders ────────────────────────────────────────────────
       function showSkeletons(n = 20) {
-        grid.innerHTML = Array.from({ length: n }, () => `
+        grid.innerHTML = Array.from(
+          { length: n },
+          () => `
           <div class="card loading">
             <div class="card-name skeleton"></div>
             <div class="card-category skeleton"></div>
             <div class="card-price skeleton"></div>
             <div class="card-date skeleton"></div>
-          </div>`).join("");
+          </div>`,
+        ).join("");
       }
 
       // ── Render products ─────────────────────────────────────────────────
@@ -201,24 +298,36 @@
           grid.innerHTML = `<p style="color:#888;grid-column:1/-1">No products found.</p>`;
           return;
         }
-        grid.innerHTML = products.map((p) => `
+        grid.innerHTML = products
+          .map(
+            (p) => `
           <div class="card">
             <div class="card-name">${escHtml(p.name)}</div>
             <div class="card-category">${escHtml(p.category)}</div>
             <div class="card-price">$${Number(p.price).toFixed(2)}</div>
             <div class="card-date">${new Date(p.created_at).toLocaleDateString()}</div>
-          </div>`).join("");
+          </div>`,
+          )
+          .join("");
       }
 
       function escHtml(str) {
-        return str.replace(/[&<>"']/g, (c) =>
-          ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+        return str.replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
         );
       }
 
       // ── Fetch one page ──────────────────────────────────────────────────
       async function loadPage(cursor) {
-        const limit    = limitSelect.value;
+        const limit = limitSelect.value;
         const category = catSelect.value;
 
         setLoading(true);
@@ -226,17 +335,22 @@
         errorBox.style.display = "none";
 
         const params = new URLSearchParams({ limit });
-        if (cursor)   params.set("cursor", cursor);
+        if (cursor) params.set("cursor", cursor);
         if (category) params.set("category", category);
+        if (sessionCursor) params.set("before", sessionCursor);
 
         try {
-          const res  = await fetch(`${API}/api/products?${params}`);
+          const res = await fetch(`${API}/api/products?${params}`);
           if (!res.ok) throw new Error(`Server error ${res.status}`);
           const json = await res.json();
 
+          // Pin the session the first time we get a snapshotCursor from the server.
+          // All subsequent requests (Next and Prev) will carry `before=sessionCursor`
+          // so newly added rows never appear while browsing.
+          if (json.snapshotCursor) sessionCursor = json.snapshotCursor;
+
           renderProducts(json.data);
-          status.textContent =
-            `Showing ${json.data.length} product${json.data.length !== 1 ? "s" : ""} · Page ${currentPage}`;
+          status.textContent = `Showing ${json.data.length} product${json.data.length !== 1 ? "s" : ""} · Page ${currentPage}`;
 
           // Push next cursor onto the stack only when moving forward
           if (json.hasNextPage && cursorStack.length === currentPage) {
@@ -276,6 +390,7 @@
       function reset() {
         cursorStack = [null];
         currentPage = 1;
+        sessionCursor = null;
         loadPage(null);
       }
 
@@ -285,7 +400,7 @@
       // ── Load categories ──────────────────────────────────────────────────
       async function loadCategories() {
         try {
-          const res  = await fetch(`${API}/api/products/categories`);
+          const res = await fetch(`${API}/api/products/categories`);
           const json = await res.json();
           json.data.forEach((cat) => {
             const opt = document.createElement("option");
@@ -297,6 +412,42 @@
           // non-fatal — all-categories still works
         }
       }
+
+      // ── Toast helper ─────────────────────────────────────────────────────
+      const toast = document.getElementById("toast");
+      let toastTimer;
+
+      function showToast(msg, isError = false) {
+        clearTimeout(toastTimer);
+        toast.textContent = msg;
+        toast.style.background = isError ? "#c0392b" : "#1a1a1a";
+        toast.classList.add("show");
+        toastTimer = setTimeout(() => toast.classList.remove("show"), 3000);
+      }
+
+      // ── Add 50 products ───────────────────────────────────────────────────
+      // New rows land at the top (created_at = NOW). Pages already loaded are
+      // protected by the cursor — their keyset condition excludes the new rows
+      // so browsing stays consistent without a reload.
+      const addBtn = document.getElementById("addBtn");
+
+      addBtn.addEventListener("click", async () => {
+        addBtn.disabled = true;
+        addBtn.classList.add("loading");
+        addBtn.textContent = "Adding…";
+        try {
+          const res = await fetch(`${API}/api/products/seed`, { method: "POST" });
+          if (!res.ok) throw new Error(`Server error ${res.status}`);
+          const json = await res.json();
+          showToast(`✓ ${json.inserted} products added — keep browsing, pages stay consistent`);
+        } catch (err) {
+          showToast(`Failed to add products: ${err.message}`, true);
+        } finally {
+          addBtn.disabled = false;
+          addBtn.classList.remove("loading");
+          addBtn.textContent = "+ Add 50 Products";
+        }
+      });
 
       // ── Boot ─────────────────────────────────────────────────────────────
       loadCategories();
